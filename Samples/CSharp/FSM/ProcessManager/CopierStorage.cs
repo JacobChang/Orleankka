@@ -19,7 +19,7 @@ namespace Example
     {
         public Task ReadStateAsync(string grainType, GrainReference grainReference, IGrainState grainState)
         {
-            throw new NotImplementedException();
+            
         }
 
         public Task WriteStateAsync(string grainType, GrainReference grainReference, IGrainState grainState)

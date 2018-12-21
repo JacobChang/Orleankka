@@ -8,11 +8,14 @@ using Orleankka.Client;
 using Orleankka.Cluster;
 
 using Orleans.Hosting;
+using Orleans.Core;
 
 using static System.Console;
 
 namespace Example
 {
+    using Microsoft.Extensions.DependencyInjection;
+
     public static class Program
     {   
         public static async Task Main()
@@ -20,6 +23,7 @@ namespace Example
             WriteLine("Running example. Booting cluster might take some time ...\n");
 
             var host = await new SiloHostBuilder()
+                .ConfigureServices(s => s.AddTransient(typeof(IStorage<CopierData>), new StateStorageBridge<CopierData>("copier-state")))
                 .ConfigureApplicationParts(x => x
                     .AddApplicationPart(Assembly.GetExecutingAssembly())
                     .WithCodeGeneration())

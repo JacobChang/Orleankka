@@ -23,20 +23,26 @@ namespace Example
     
     public class Copier : ActorGrain
     {
-        readonly IStorage<CopierData> data;
+        CopierData Data => storage.State;
+
+        readonly IStorage<CopierData> storage;
         readonly Behavior behavior;
 
-        public Copier(IStorage<CopierData> data)
+        public Copier(IStorage<CopierData> storage)
         {
-            this.data = data;
-
+            this.storage = storage;
+            
             Receive Durable(Receive next)
             {
                 return async message =>
                 {
                     var result = await next(message);
                     if (message is Become)
-                        await Save();
+                    {
+                        Data.CurrentState = behavior.Current;
+                        Data.PreviousState = behavior.Previous;
+                        await storage.WriteStateAsync();
+                    }
                     return result;
                 };
             }
@@ -49,21 +55,29 @@ namespace Example
             var fsm = new StateMachine()
                 .State(Active, supervision.On)
                     .Substate(Preparing,   Durable)
-                    .Substate(Copying,     Durable, trait: Cancellable)
-                    .Substate(Compressing, Durable, trait: Cancellable)                    
+                    .Substate(Copying,     Trait.Of(Cancellable), Durable)
+                    .Substate(Compressing, Trait.Of(Cancellable), Durable)                    
                     .Substate(Cleaning,    Durable)
                 .State(Inactive, supervision.Off)
                     .Substate(Initial)
                     .Substate(Suspended,   Durable)
-                    .Substate(Completed,   Durable, trait: Resetable)
-                    .Substate(Canceled,    Durable, trait: Resetable);
+                    .Substate(Completed,   Trait.Of(Resetable), Durable)
+                    .Substate(Canceled,    Trait.Of(Resetable), Durable);
 
             behavior = new Behavior(fsm);
-            behavior.Initial(Initial);
         }
 
-        public override Task<object> Receive(object message) 
-            => behavior.Receive(message);
+        public override async Task OnActivateAsync()
+        {
+            await storage.ReadStateAsync();
+
+            var state = Data.CurrentState ?? nameof(Initial);
+            behavior.Initial(state);
+
+            await base.OnActivateAsync();
+        }
+
+        public override Task<object> Receive(object message) => behavior.Receive(message);
 
         async Task Become(Receive other)
         {
